@@ -48,10 +48,6 @@ impl Encrypter {
         })
     }
 
-    // fn encrypt(s: String) -> {
-
-    // }
-
     // for future implementation: choosing your own alphabet
     // fn change_alphabet(&self, words: &[&str]) -> Vec<String> {
     //     let alphabet = words.concat();
@@ -76,6 +72,24 @@ impl Encrypter {
             .map(|c| c.to_string())
             .collect::<Vec<String>>())
     }
+
+    fn encrypt(&self, input: &Vec<String>) -> io::Result<String> {
+        let mut cipher_text = String::new();
+
+        for letter in input {
+            if let Some(index) = self.alphabet.iter().position(|x| x == letter) {
+                // println!("letter {} is at index {} in original string", letter, index);
+                cipher_text.push_str(&self.cipher[index]);
+            } else {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Letter '{}' not found in alphabet", letter),
+                ));
+            }
+        }
+
+        Ok(cipher_text)
+    }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -84,24 +98,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     let input = Encrypter::get_user_input("Enter a string you wish to encrypt: ")?;
 
     // encrypt input
-    let mut cipher_text = String::new();
+    let encrypted_input = enc.encrypt(&input)?;
 
-    for letter in &input {
-        if let Some(index) = enc.alphabet.iter().position(|x| x == letter) {
-            // println!("letter {} is at index {} in original string", letter, index);
-            cipher_text.push_str(&enc.cipher[index]);
-        } else {
-            println!("letter '{}' not found", letter);
-        }
-    }
-
-    println!("Input text is now: {:?}", input.join(""));
-    println!("Cipher text is now: {cipher_text}");
+    println!("Input text is now: {}", input.join(""));
+    println!("Cipher text is now: {encrypted_input}");
 
     // Decrypt input
     let mut plain_text = String::new();
 
-    let cipher_iter = cipher_text
+    let cipher_iter = encrypted_input
         .chars()
         .map(|c| c.to_string())
         .collect::<Vec<String>>();
@@ -114,7 +119,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    println!("Cipher text is now: {cipher_text}");
+    println!("Cipher text is now: {encrypted_input}");
     println!("Original text is now: {plain_text}");
 
     Ok(())
