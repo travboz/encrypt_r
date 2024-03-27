@@ -90,6 +90,28 @@ impl Encrypter {
 
         Ok(cipher_text)
     }
+
+    fn decrypt(&self, input: &String) -> io::Result<String> {
+        let mut plain_text = String::new();
+
+        let cipher_iter = input
+            .chars()
+            .map(|c| c.to_string())
+            .collect::<Vec<String>>();
+
+        for letter in &cipher_iter {
+            if let Some(index) = self.cipher.iter().position(|x| x == letter) {
+                plain_text.push_str(&self.alphabet[index]);
+            } else {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Letter '{}' not found in alphabet", letter),
+                ));
+            }
+        }
+
+        Ok(plain_text)
+    }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -104,23 +126,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("Cipher text is now: {encrypted_input}");
 
     // Decrypt input
-    let mut plain_text = String::new();
-
-    let cipher_iter = encrypted_input
-        .chars()
-        .map(|c| c.to_string())
-        .collect::<Vec<String>>();
-
-    for letter in &cipher_iter {
-        if let Some(index) = enc.cipher.iter().position(|x| x == letter) {
-            plain_text.push_str(&enc.alphabet[index]);
-        } else {
-            println!("letter '{}' not found", letter);
-        }
-    }
+    let decrypted_input = enc.decrypt(&encrypted_input)?;
 
     println!("Cipher text is now: {encrypted_input}");
-    println!("Original text is now: {plain_text}");
+    println!("Original text is now: {decrypted_input}");
 
     Ok(())
 }
