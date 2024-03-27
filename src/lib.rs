@@ -1,5 +1,5 @@
 // default alphabet
-const PUNCTUATION: &str = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
+const PUNCTUATION: &str = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~\n";
 const DIGITS: &str = "0123456789";
 const ASCII_LETTERS: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const SPACE: &str = " ";
@@ -10,7 +10,7 @@ use rand::Rng;
 use shuffle::irs::Irs;
 use shuffle::shuffler::Shuffler;
 use std::fs::{File, OpenOptions};
-use std::io::{BufReader, BufWriter, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 use std::{fs, io};
 
@@ -50,6 +50,14 @@ impl EncrypterConfig {
         })
     }
 
+    fn change_alphabet(&mut self, new_alphabet: Vec<String>) {
+        self.alphabet = new_alphabet;
+    }
+
+    fn change_cipher(&mut self, new_cipher: Vec<String>) {
+        self.cipher = new_cipher;
+    }
+
     // for future implementation: choosing your own alphabet
     // fn change_alphabet(&self, words: &[&str]) -> Vec<String> {
     //     let alphabet = words.concat();
@@ -74,7 +82,7 @@ pub fn encrypt_file(input_path: &str, econ: &EncrypterConfig) -> io::Result<(Str
 
     // encrypt the original file one chunk at a time
     // output the key path to: key_filename
-    let (e_p, k_p) = process_file(input_path, econ)?;
+    let (e_p, k_p) = encrypt_as_chunks(input_path, econ)?;
 
     // output the new encrypted file path and key path
     println!("Paths are: {} and {}", e_p, k_p);
@@ -112,29 +120,7 @@ pub fn encrypt(input: &Vec<String>, econ: &EncrypterConfig) -> io::Result<String
     Ok(cipher_text)
 }
 
-pub fn decrypt(input: &String, econ: &EncrypterConfig) -> io::Result<String> {
-    let mut plain_text = String::new();
-
-    let cipher_iter = input
-        .chars()
-        .map(|c| c.to_string())
-        .collect::<Vec<String>>();
-
-    for letter in &cipher_iter {
-        if let Some(index) = econ.cipher.iter().position(|x| x == letter) {
-            plain_text.push_str(&econ.alphabet[index]);
-        } else {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("Letter '{}' not found in alphabet", letter),
-            ));
-        }
-    }
-
-    Ok(plain_text)
-}
-
-fn bytes_to_string(bytes: &[u8]) -> Vec<String> {
+fn bytes_to_string_vec(bytes: &[u8]) -> Vec<String> {
     String::from_utf8_lossy(bytes)
         .chars()
         .map(|l| l.to_string())
@@ -149,7 +135,7 @@ pub fn file_exists(file_path: &str) -> bool {
     }
 }
 
-fn output_key(file_path: &str, content: &Vec<String>) -> io::Result<String> {
+fn generate_key_file(file_path: &str, content: &Vec<String>) -> io::Result<String> {
     // Open or create a new file for writing
     let output_file_name = format!("key_{}", file_path);
     let mut file = File::create(&output_file_name)?;
@@ -164,7 +150,10 @@ fn output_key(file_path: &str, content: &Vec<String>) -> io::Result<String> {
     Ok(output_file_name)
 }
 
-pub fn process_file(input_file_path: &str, econ: &EncrypterConfig) -> io::Result<(String, String)> {
+pub fn encrypt_as_chunks(
+    input_file_path: &str,
+    econ: &EncrypterConfig,
+) -> io::Result<(String, String)> {
     // Open input file for reading
     let input_file = File::open(input_file_path)?;
     let mut input_reader = BufReader::new(input_file);
@@ -192,7 +181,7 @@ pub fn process_file(input_file_path: &str, econ: &EncrypterConfig) -> io::Result
         }
 
         // Encrypt data read from buffer
-        let new_data_to_encrypt = bytes_to_string(&buffer[..bytes_read]);
+        let new_data_to_encrypt = bytes_to_string_vec(&buffer[..bytes_read]);
         let encrypted_data = encrypt(&new_data_to_encrypt, econ)?;
         // Write encrypted data to output file
         output_writer.write_all(encrypted_data.as_bytes())?;
@@ -201,7 +190,85 @@ pub fn process_file(input_file_path: &str, econ: &EncrypterConfig) -> io::Result
     // Flush buffered output to ensure all data is written
     output_writer.flush()?;
 
-    let key_path = output_key(&input_file_path, &econ.cipher)?;
+    let key_path = generate_key_file(&input_file_path, &econ.cipher)?;
 
     Ok((output_file_path, key_path))
+}
+
+// key fits in a string
+pub fn get_key(key_path: &str) -> io::Result<Vec<String>> {
+    let key = fs::read_to_string(key_path)?;
+    Ok(key.chars().map(|c| c.to_string()).collect::<Vec<String>>())
+}
+
+pub fn decrypt(input: &Vec<String>, econ: &EncrypterConfig) -> io::Result<String> {
+    let mut plain_text = String::new();
+
+    for letter in input {
+        if let Some(index) = econ.cipher.iter().position(|x| x == letter) {
+            plain_text.push_str(&econ.alphabet[index]);
+        } else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Letter '{}' not found in alphabet", letter),
+            ));
+        }
+    }
+
+    Ok(plain_text)
+}
+
+pub fn decrypt_file(
+    input_path: &str,
+    key_path: &str,
+    econ: &mut EncrypterConfig,
+) -> io::Result<String> {
+    let input_file = File::open(input_path)?;
+    let key = get_key(key_path)?;
+
+    let input_file = File::open(input_path)?;
+    let mut input_reader = BufReader::new(input_file);
+
+    // changing the alphabet
+    let old_alphabet = econ.alphabet.clone();
+
+    println!("Old alphabet is: {:?}", old_alphabet.join(""));
+    println!("New alphabet is: {:?}", key.join(""));
+
+    econ.change_alphabet(old_alphabet);
+    econ.change_cipher(key);
+
+    let output_file_path = format!("decrypted_{}", input_path);
+
+    // Create or open output file for writing
+    let output_file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(&output_file_path)?;
+    let mut output_writer = BufWriter::new(output_file);
+
+    // Create a buffer to store data read from input file
+    let mut buffer = [0; 1024]; // You can adjust the buffer size as needed
+
+    // Iterate over input file contents
+    loop {
+        let bytes_read = input_reader.read(&mut buffer)?;
+
+        if bytes_read == 0 {
+            // End of file
+            break;
+        }
+
+        // Encrypt data read from buffer
+        let new_data_to_encrypt = bytes_to_string_vec(&buffer[..bytes_read]);
+        let encrypted_data = decrypt(&new_data_to_encrypt, econ)?;
+        // Write encrypted data to output file
+        output_writer.write_all(encrypted_data.as_bytes())?;
+    }
+
+    // Flush buffered output to ensure all data is written
+    output_writer.flush()?;
+
+    Ok(output_file_path)
 }
