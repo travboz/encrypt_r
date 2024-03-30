@@ -4,11 +4,13 @@ const DIGITS: &str = "0123456789";
 const ASCII_LETTERS: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const SPACE: &str = " ";
 
+use clap::{App, Arg};
 use rand::rngs::mock::StepRng;
 use rand::Rng;
 
 use shuffle::irs::Irs;
 use shuffle::shuffler::Shuffler;
+use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
@@ -271,4 +273,65 @@ pub fn decrypt_file(
     output_writer.flush()?;
 
     Ok(output_file_path)
+}
+
+type MyResult<T> = Result<T, Box<dyn Error>>;
+
+#[derive(Debug)]
+pub struct Config {
+    files: Vec<String>,
+    lines: usize,
+    bytes: Option<usize>,
+}
+
+pub fn get_args() -> MyResult<()> {
+    let matches = App::new("encrypt_r")
+        .version("0.1.0")
+        .author("Travis")
+        .about("Basic encryption using a Substitution Method")
+        .arg(
+            Arg::with_name("encrypt")
+                .value_name("encrypt_file")
+                .short("e")
+                .long("encrypt")
+                .multiple(true)
+                .empty_values(false)
+                .help("File to encrypt"),
+        )
+        .arg(
+            Arg::with_name("decrypt")
+                .help("File to encrypt")
+                .short("d")
+                .long("decrypt")
+                .takes_value(true)
+                .empty_values(false)
+                .value_name("count")
+                .number_of_values(1)
+                .empty_values(true)
+                .requires("key"),
+        )
+        .arg(
+            Arg::with_name("key")
+                .help("Key file for decryption")
+                .short("k")
+                .long("key-file")
+                .takes_value(true)
+                .value_name("key")
+                .number_of_values(1)
+                .requires("decrypt"),
+        )
+        .get_matches();
+
+    let encrypt = matches.value_of_lossy("encrypt").unwrap().to_string();
+
+    if matches.is_present("decrypt") {
+        let decrypt = matches.value_of_lossy("decrypt").unwrap().to_string();
+        let key = matches.value_of_lossy("key").unwrap().to_string();
+
+        println!("{encrypt}\n{decrypt}\n{key}");
+    } else {
+        println!("{encrypt}");
+    }
+
+    Ok(())
 }
